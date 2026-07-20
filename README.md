@@ -45,6 +45,7 @@ PraesciaPad currently accepts single-file, three-dimensional NIfTI-1 volumes wit
 - Signed or unsigned 8-, 16-, 32-, or 64-bit integer voxels
 - 32- or 64-bit floating-point voxels
 - At most 300 million voxels and a gzip-expanded size no greater than 1 GB
+- An estimated processing working set no greater than 512 MiB, including source buffers, intensities, labels, and runtime headroom
 
 NIfTI-2, paired `.hdr`/`.img` files, multi-frame volumes, complex values, RGB data, and scans without an unambiguous spatial transform are not supported.
 
@@ -87,6 +88,8 @@ xcodebuild test \
 ```
 
 The tests cover rotated and anisotropic affine volume calculations, world-space distance, `sform` and `qform` parsing, intensity scaling, deterministic segmentation volume totals, and malformed-file errors.
+
+Physical-device performance and memory are verified separately with Instruments. See `physicalProfiling.md` and run `./scripts/profile-ipad.sh "Device Name"` with a connected iPad; simulator measurements are not accepted as hardware evidence.
 
 ## Project Structure
 

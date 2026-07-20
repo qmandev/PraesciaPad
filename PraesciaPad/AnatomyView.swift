@@ -14,6 +14,7 @@ struct AnatomyView: View {
     @GestureState private var magnification: CGFloat = 1
     @State private var measuring = false
     @State private var sceneError: String?
+    @State private var sceneIsLoading = true
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -21,7 +22,7 @@ struct AnatomyView: View {
                 .ignoresSafeArea()
             RealityView { content in
                 do {
-                    try populateRoot()
+                    try await populateRoot()
                     content.add(root)
 
                     let camera = PerspectiveCamera()
@@ -33,7 +34,9 @@ struct AnatomyView: View {
                     light.light.intensity = 1_800
                     light.look(at: .zero, from: [0.2, 0.3, 0.4], relativeTo: nil)
                     content.add(light)
+                    sceneIsLoading = false
                 } catch {
+                    sceneIsLoading = false
                     sceneError = error.localizedDescription
                 }
             } update: { _ in
@@ -49,12 +52,21 @@ struct AnatomyView: View {
                 }
                 updateMarkers()
             }
+            .accessibilityIdentifier("anatomy-view")
             .gesture(rotationGesture)
             .simultaneousGesture(zoomGesture)
             .simultaneousGesture(tapGesture)
 
             controls
                 .padding(22)
+
+            if sceneIsLoading {
+                ProgressView("Preparing 3D scene…")
+                    .padding(18)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .accessibilityIdentifier("scene-loading")
+            }
 
             if let sceneError {
                 Text(sceneError)
@@ -66,7 +78,6 @@ struct AnatomyView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .accessibilityIdentifier("anatomy-view")
     }
 
     private var controls: some View {
@@ -143,14 +154,14 @@ struct AnatomyView: View {
             }
     }
 
-    private func populateRoot() throws {
+    private func populateRoot() async throws {
         root.name = "scan-root"
         for meshData in scan.meshes {
             guard let region = scan.regions.first(where: { $0.id == meshData.id }), !meshData.positionsMM.isEmpty else { continue }
             var descriptor = MeshDescriptor(name: "band-\(meshData.id)")
             descriptor.positions = MeshBuffers.Positions(meshData.positionsMM)
             descriptor.primitives = .triangles(meshData.triangleIndices)
-            let mesh = try MeshResource.generate(from: [descriptor])
+            let mesh = try await MeshResource(from: [descriptor])
             let entity = ModelEntity(mesh: mesh, materials: [material(for: region, selected: false)])
             entity.name = "region-\(region.id)"
             entity.components.set(InputTargetComponent())

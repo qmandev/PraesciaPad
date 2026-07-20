@@ -4,6 +4,44 @@ import Testing
 @testable import PraesciaPad
 
 struct PraesciaPadTests {
+    @Test @MainActor
+    func newerImportCannotBeOverwrittenByStaleCompletion() async throws {
+        let older = processedScan(named: "older")
+        let newer = processedScan(named: "newer")
+        let store = CaseStore { url in
+            if url.lastPathComponent == "older.nii" {
+                try? await Task.sleep(for: .milliseconds(160))
+                return older
+            }
+            try await Task.sleep(for: .milliseconds(10))
+            return newer
+        }
+
+        store.open(URL(fileURLWithPath: "/tmp/older.nii"))
+        store.open(URL(fileURLWithPath: "/tmp/newer.nii"))
+        try await Task.sleep(for: .milliseconds(240))
+
+        #expect(store.scan?.metadata.dataType == "newer")
+    }
+
+    @Test @MainActor
+    func closingCasePreventsLateLoadFromRestoringScan() async throws {
+        let store = CaseStore { _ in
+            try? await Task.sleep(for: .milliseconds(100))
+            return processedScan(named: "late")
+        }
+
+        store.open(URL(fileURLWithPath: "/tmp/late.nii"))
+        store.close()
+        try await Task.sleep(for: .milliseconds(160))
+
+        if case .empty = store.state {
+            #expect(store.scan == nil)
+        } else {
+            Issue.record("A cancelled load restored case state after close.")
+        }
+    }
+
     @Test func determinantGivesVoxelVolumeForRotatedAnisotropicAffine() throws {
         let angle = Double.pi / 5
         let rotation = simd_double3x3(rows: [
@@ -103,6 +141,36 @@ struct PraesciaPadTests {
         #expect(abs(volume.metadata.voxelVolumeMM3 - 24) < 1e-10)
     }
 
+    @Test func parserRejectsVoxelOffsetOutsideAddressableFileData() {
+        var fixture = makeNIfTI(
+            dimensions: SIMD3(2, 2, 2),
+            affineRows: [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]],
+            values: Array(0..<8).map(Int16.init)
+        )
+        fixture.writeFloat(.greatestFiniteMagnitude, at: 108)
+
+        #expect(throws: ScanError.self) { try NIfTIParser.parse(fixture) }
+    }
+
+    @Test func segmentationHandlesFullFiniteFloatRangeWithoutTrapping() throws {
+        let largest = Double(Float.greatestFiniteMagnitude)
+        let intensities = (0...100).map { index in
+            Float(-largest + 2 * largest * Double(index) / 100)
+        }
+        let metadata = ScanMetadata(
+            dimensions: SIMD3(101, 1, 1),
+            voxelSizeMM: SIMD3(repeating: 1),
+            dataType: "32-bit floating point",
+            affineMM: matrix_identity_double4x4,
+            voxelVolumeMM3: 1
+        )
+
+        let result = try ScanPipeline.segment(ScanVolume(metadata: metadata, intensities: intensities))
+
+        #expect(result.regions.count == 3)
+        #expect(result.regions.allSatisfy { $0.voxelCount > 0 })
+    }
+
     @Test func segmentationVolumesUseAllVoxelsAndSumExactly() throws {
         let affine = simd_double4x4(
             SIMD4(0, 2, 0, 0), SIMD4(-3, 0, 0, 0),
@@ -174,6 +242,55 @@ struct PraesciaPadTests {
         #expect(simd_distance(extents, SIMD3(6, 20, 12)) < 1e-6)
     }
 
+    @Test func sampledMeshClampsNonDivisibleDimensionsToPhysicalBounds() throws {
+        let dimensions = SIMD3(40, 39, 38)
+        let affine = simd_double4x4(diagonal: SIMD4(2, 3, 4, 1))
+        let metadata = ScanMetadata(
+            dimensions: dimensions,
+            voxelSizeMM: SIMD3(2, 3, 4),
+            dataType: "test",
+            affineMM: affine,
+            voxelVolumeMM3: 24
+        )
+        let result = ScanPipeline.buildMeshes(
+            labels: [UInt8](repeating: 1, count: dimensions.x * dimensions.y * dimensions.z),
+            metadata: metadata
+        )
+        let mesh = try #require(result.meshes.first { $0.id == 1 })
+        let bounds = try meshBounds(mesh.positionsMM)
+
+        #expect(result.stride == 2)
+        #expect(simd_distance(bounds.maximum - bounds.minimum, SIMD3(80, 152, 117)) < 1e-6)
+        #expect(simd_distance(bounds.maximum + bounds.minimum, .zero) < 1e-6)
+    }
+
+    @Test func memoryBudgetAllowsResearchScaleVolume() throws {
+        try ScanResourceBudget.validateVolume(
+            compressedSourceBytes: 8 * 1_024 * 1_024,
+            decodedSourceBytes: 20 * 1_024 * 1_024,
+            voxelCount: 9_830_400
+        )
+    }
+
+    @Test func memoryBudgetRejectsOversizedDecodedVolume() {
+        #expect(throws: ScanError.self) {
+            try ScanResourceBudget.validateVolume(
+                compressedSourceBytes: 0,
+                decodedSourceBytes: 300 * 1_024 * 1_024,
+                voxelCount: 50_000_000
+            )
+        }
+    }
+
+    @Test func memoryBudgetRejectsOversizedGzipExpansionBeforeAllocation() {
+        #expect(throws: ScanError.self) {
+            try ScanResourceBudget.validateGzip(
+                compressedBytes: 20 * 1_024 * 1_024,
+                expandedBytes: 200 * 1_024 * 1_024
+            )
+        }
+    }
+
     @Test func corruptAndAmbiguousFilesFailClearly() {
         #expect(throws: ScanError.self) { try NIfTIParser.parse(Data(repeating: 0, count: 40)) }
 
@@ -189,6 +306,22 @@ struct PraesciaPadTests {
 
 private func voxelIndex(_ voxel: SIMD3<Int>, dimensions: SIMD3<Int>) -> Int {
     voxel.x + dimensions.x * (voxel.y + dimensions.y * voxel.z)
+}
+
+private func processedScan(named name: String) -> ProcessedScan {
+    ProcessedScan(
+        metadata: ScanMetadata(
+            dimensions: SIMD3(repeating: 1),
+            voxelSizeMM: SIMD3(repeating: 1),
+            dataType: name,
+            affineMM: matrix_identity_double4x4,
+            voxelVolumeMM3: 1
+        ),
+        regions: [],
+        meshes: [],
+        segmentedVolumeML: 0,
+        displayStride: 1
+    )
 }
 
 private func meshCentroid(_ meshes: [RegionMesh], id: UInt8) throws -> SIMD3<Float> {

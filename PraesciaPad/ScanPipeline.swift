@@ -23,11 +23,19 @@ enum ScanPipeline {
         }
 
         let binCount = 4_096
-        let range = Double(maximum - minimum)
+        let minimumValue = Double(minimum)
+        let range = Double(maximum) - minimumValue
+        guard range.isFinite, range > 0 else {
+            throw ScanError.processing("The intensity range is invalid.")
+        }
         var histogram = [Int](repeating: 0, count: binCount)
-        for value in volume.intensities {
-            let normalized = Double(value - minimum) / range
-            let bin = min(binCount - 1, max(0, Int(normalized * Double(binCount - 1))))
+        for (index, value) in volume.intensities.enumerated() {
+            if index.isMultiple(of: 262_144) { try Task.checkCancellation() }
+            let normalized = (Double(value) - minimumValue) / range
+            guard normalized.isFinite else {
+                throw ScanError.processing("The voxel data contains invalid intensity values.")
+            }
+            let bin = Int(min(1, max(0, normalized)) * Double(binCount - 1))
             histogram[bin] += 1
         }
 
@@ -44,7 +52,12 @@ enum ScanPipeline {
         var labels = [UInt8](repeating: 0, count: volume.intensities.count)
         var counts = [Int](repeating: 0, count: 4)
         for (index, value) in volume.intensities.enumerated() {
-            let bin = min(binCount - 1, max(0, Int(Double(value - minimum) / range * Double(binCount - 1))))
+            if index.isMultiple(of: 262_144) { try Task.checkCancellation() }
+            let normalized = (Double(value) - minimumValue) / range
+            guard normalized.isFinite else {
+                throw ScanError.processing("The voxel data contains invalid intensity values.")
+            }
+            let bin = Int(min(1, max(0, normalized)) * Double(binCount - 1))
             let label: UInt8
             if bin <= backgroundBin {
                 label = 0
@@ -139,9 +152,18 @@ enum ScanPipeline {
                         || labelAt(x, y, z - stride) != label
                         || labelAt(x, y, z + stride) != label
                     guard boundary else { continue }
+                    let minimum = sampledBlockMinimum(
+                        voxel: SIMD3(x, y, z),
+                        stride: stride
+                    )
+                    let maximum = sampledBlockMaximum(
+                        voxel: SIMD3(x, y, z),
+                        dimensions: dimensions,
+                        stride: stride
+                    )
                     appendVoxelBlock(
-                        center: SIMD3(Double(x), Double(y), Double(z)),
-                        halfWidth: Double(stride) / 2,
+                        minimum: minimum,
+                        maximum: maximum,
                         affine: metadata.affineMM,
                         displayCenter: center,
                         positions: &positions[Int(label)],
@@ -157,6 +179,26 @@ enum ScanPipeline {
         return (meshes, stride)
     }
 
+    private static func sampledBlockMinimum(voxel: SIMD3<Int>, stride: Int) -> SIMD3<Double> {
+        SIMD3(
+            voxel.x == 0 ? -0.5 : Double(voxel.x) - Double(stride) / 2,
+            voxel.y == 0 ? -0.5 : Double(voxel.y) - Double(stride) / 2,
+            voxel.z == 0 ? -0.5 : Double(voxel.z) - Double(stride) / 2
+        )
+    }
+
+    private static func sampledBlockMaximum(
+        voxel: SIMD3<Int>,
+        dimensions: SIMD3<Int>,
+        stride: Int
+    ) -> SIMD3<Double> {
+        SIMD3(
+            voxel.x + stride >= dimensions.x ? Double(dimensions.x) - 0.5 : Double(voxel.x) + Double(stride) / 2,
+            voxel.y + stride >= dimensions.y ? Double(dimensions.y) - 0.5 : Double(voxel.y) + Double(stride) / 2,
+            voxel.z + stride >= dimensions.z ? Double(dimensions.z) - 0.5 : Double(voxel.z) + Double(stride) / 2
+        )
+    }
+
     private static func displayCenter(metadata: ScanMetadata) -> SIMD3<Double> {
         let maximum = SIMD3<Double>(
             Double(metadata.dimensions.x - 1),
@@ -168,21 +210,22 @@ enum ScanPipeline {
     }
 
     private static func appendVoxelBlock(
-        center: SIMD3<Double>,
-        halfWidth: Double,
+        minimum: SIMD3<Double>,
+        maximum: SIMD3<Double>,
         affine: simd_double4x4,
         displayCenter: SIMD3<Double>,
         positions: inout [SIMD3<Float>],
         indices: inout [UInt32]
     ) {
-        let signs: [SIMD3<Double>] = [
-            SIMD3(-1, -1, -1), SIMD3(1, -1, -1), SIMD3(1, 1, -1), SIMD3(-1, 1, -1),
-            SIMD3(-1, -1, 1), SIMD3(1, -1, 1), SIMD3(1, 1, 1), SIMD3(-1, 1, 1)
+        let corners: [SIMD3<Double>] = [
+            SIMD3(minimum.x, minimum.y, minimum.z), SIMD3(maximum.x, minimum.y, minimum.z),
+            SIMD3(maximum.x, maximum.y, minimum.z), SIMD3(minimum.x, maximum.y, minimum.z),
+            SIMD3(minimum.x, minimum.y, maximum.z), SIMD3(maximum.x, minimum.y, maximum.z),
+            SIMD3(maximum.x, maximum.y, maximum.z), SIMD3(minimum.x, maximum.y, maximum.z)
         ]
         let base = UInt32(positions.count)
-        positions.append(contentsOf: signs.map { sign in
-            let voxelCorner = center + sign * halfWidth
-            let world = PhysicalMath.worldPoint(voxel: voxelCorner, affine: affine)
+        positions.append(contentsOf: corners.map { corner in
+            let world = PhysicalMath.worldPoint(voxel: corner, affine: affine)
             return SIMD3<Float>(realityCoordinates(world) - displayCenter)
         })
         let cubeIndices: [UInt32] = [

@@ -10,7 +10,7 @@ final class PraesciaPadUITests: XCTestCase {
         let app = launch()
 
         XCTAssertTrue(app.buttons["welcome-open-scan"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.otherElements["safety-notice"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["safety-notice"].exists)
         XCTAssertTrue(app.staticTexts["RESEARCH PROTOTYPE · NOT FOR DIAGNOSIS"].exists)
     }
 

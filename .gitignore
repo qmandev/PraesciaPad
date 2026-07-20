@@ -5,6 +5,9 @@
 *.xcuserstate
 **/xcuserdata/
 
+# Local Instruments captures
+*.trace/
+
 # Local scan data
 IXI648-Guys-1107-T1.nii.gz
 

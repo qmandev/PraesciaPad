@@ -15,6 +15,66 @@ enum ScanError: LocalizedError, Sendable {
     }
 }
 
+enum ScanResourceBudget {
+    static let maximumWorkingSetBytes = 512 * 1_024 * 1_024
+    private static let runtimeHeadroomBytes = 128 * 1_024 * 1_024
+
+    static func validateVolume(
+        compressedSourceBytes: Int,
+        decodedSourceBytes: Int,
+        voxelCount: Int
+    ) throws {
+        try validate(
+            components: [
+                compressedSourceBytes,
+                decodedSourceBytes,
+                try multiplied(voxelCount, by: MemoryLayout<Float>.stride),
+                try multiplied(voxelCount, by: MemoryLayout<UInt8>.stride),
+                runtimeHeadroomBytes
+            ],
+            context: "The decoded volume"
+        )
+    }
+
+    static func validateGzip(compressedBytes: Int, expandedBytes: Int) throws {
+        // Decompression may briefly retain the compressed input, output buffer, and Data copy.
+        try validate(
+            components: [
+                compressedBytes,
+                try multiplied(expandedBytes, by: 2),
+                runtimeHeadroomBytes
+            ],
+            context: "The compressed volume"
+        )
+    }
+
+    private static func multiplied(_ value: Int, by multiplier: Int) throws -> Int {
+        let (result, overflow) = value.multipliedReportingOverflow(by: multiplier)
+        guard value >= 0, multiplier >= 0, !overflow else {
+            throw ScanError.unsupported("Its estimated memory requirement is too large.")
+        }
+        return result
+    }
+
+    private static func validate(components: [Int], context: String) throws {
+        var total = 0
+        for component in components {
+            let (result, overflow) = total.addingReportingOverflow(component)
+            guard component >= 0, !overflow else {
+                throw ScanError.unsupported("Its estimated memory requirement is too large.")
+            }
+            total = result
+        }
+        guard total <= maximumWorkingSetBytes else {
+            let estimatedMiB = Int(ceil(Double(total) / Double(1_024 * 1_024)))
+            let limitMiB = maximumWorkingSetBytes / (1_024 * 1_024)
+            throw ScanError.unsupported(
+                "\(context) needs an estimated \(estimatedMiB) MiB, above the \(limitMiB) MiB on-device processing budget."
+            )
+        }
+    }
+}
+
 struct ScanMetadata: Sendable, Equatable {
     let dimensions: SIMD3<Int>
     let voxelSizeMM: SIMD3<Double>

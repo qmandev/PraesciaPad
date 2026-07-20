@@ -209,6 +209,7 @@ private struct WelcomeView: View {
                     .font(.system(size: 12, weight: .bold, design: .rounded))
                     .tracking(2)
                     .foregroundStyle(Color.praesciaAmber)
+                    .accessibilityIdentifier("safety-notice")
             }
             .padding(64)
             .frame(maxWidth: .infinity, alignment: .leading)

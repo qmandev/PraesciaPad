@@ -3,6 +3,7 @@ import simd
 
 enum NIfTIParser {
     static func parse(_ source: Data) throws -> ScanVolume {
+        let sourceIsCompressed = source.count >= 2 && source[0] == 0x1f && source[1] == 0x8b
         let data = try GzipDecoder.decodeIfNeeded(source)
         guard data.count >= 352 else { throw ScanError.invalidFile("The header is truncated.") }
 
@@ -51,7 +52,8 @@ enum NIfTIParser {
             throw ScanError.invalidFile("Its datatype and bit depth disagree.")
         }
         let offsetFloat = try reader.float32(at: 108)
-        guard offsetFloat.isFinite, offsetFloat >= 352, offsetFloat.rounded(.down) == offsetFloat else {
+        guard offsetFloat.isFinite, offsetFloat >= 352,
+              offsetFloat <= Float(data.count), offsetFloat.rounded(.down) == offsetFloat else {
             throw ScanError.invalidFile("Its voxel-data offset is invalid.")
         }
         let dataOffset = Int(offsetFloat)
@@ -59,6 +61,11 @@ enum NIfTIParser {
         guard !payloadOverflow, dataOffset <= data.count, payloadSize <= data.count - dataOffset else {
             throw ScanError.invalidFile("The voxel payload is truncated.")
         }
+        try ScanResourceBudget.validateVolume(
+            compressedSourceBytes: sourceIsCompressed ? source.count : 0,
+            decodedSourceBytes: data.count,
+            voxelCount: totalVoxels
+        )
 
         let unitScale = try spatialUnitScale(code: data[123] & 0x07)
         let affine = try spatialAffine(reader: reader, unitScale: unitScale)
@@ -79,10 +86,14 @@ enum NIfTIParser {
         var intensities = [Float]()
         intensities.reserveCapacity(totalVoxels)
         for index in 0..<totalVoxels {
+            if index.isMultiple(of: 262_144) { try Task.checkCancellation() }
             let raw = try dataType.value(reader: reader, at: dataOffset + index * dataType.byteCount)
             let scaled = raw * slope + intercept
-            guard scaled.isFinite else { throw ScanError.invalidFile("Its voxel data contains non-finite values.") }
-            intensities.append(Float(scaled))
+            let intensity = Float(scaled)
+            guard scaled.isFinite, intensity.isFinite else {
+                throw ScanError.invalidFile("Its voxel data contains values outside the supported intensity range.")
+            }
+            intensities.append(intensity)
         }
 
         let metadata = ScanMetadata(

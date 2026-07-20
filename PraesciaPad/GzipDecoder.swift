@@ -36,6 +36,10 @@ enum GzipDecoder {
         guard expectedSize > 0, expectedSize <= 1_073_741_824 else {
             throw ScanError.unsupported("Its expanded size is invalid or exceeds the 1 GB safety limit.")
         }
+        try ScanResourceBudget.validateGzip(
+            compressedBytes: data.count,
+            expandedBytes: Int(expectedSize)
+        )
 
         let payload = data[cursor..<trailer]
         var output = [UInt8](repeating: 0, count: Int(expectedSize))
