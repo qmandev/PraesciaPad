@@ -48,9 +48,13 @@ Affected requirements: F1.1, F4.1, N4.1, and N4.2.
 
 ### Low
 
-#### UI tests do not exercise product workflows
+#### Implemented: UI workflow coverage
 
-The UI test target contains generated launch and launch-performance tests but no assertions for file import, error recovery, region visibility, selection, or measurement. These tests are not explicitly required, but their absence leaves the main interaction paths dependent on manual verification.
+The generated no-assertion UI test has been replaced with four product workflow tests covering the welcome and safety framing, recoverable scan errors, acquisition facts, selected-region descriptions, visibility state, and measurement undo and clear controls. The launch screenshot test now also asserts that the import action exists.
+
+A deterministic scan fixture and error state are available only in `DEBUG` builds through the `PRAESCIA_UI_TEST_MODE` launch environment key. Release builds contain neither the fixture nor its configuration entry point.
+
+The complete UI test bundle compiles. The error-recovery workflow passed on the iPad simulator. Xcode repeatedly failed to launch runners for the other workflows before their test cases started, including with parallel execution disabled and on a second simulator. Those three tests therefore remain execution-unverified rather than failed assertions.
 
 ## Implemented Requirements
 
@@ -74,8 +78,12 @@ The UI test target contains generated launch and launch-performance tests but no
 - Swift test execution on the iPad (A16) simulator: nine of nine passed.
 - Asymmetric RAS-to-RealityKit orientation fixture: passed without reflection.
 - Anisotropic generated-mesh extent fixture: passed.
+- UI workflow test bundle compilation: passed.
+- Recoverable-error UI workflow: passed.
+- Welcome, loaded-scan, and measurement UI workflows: execution blocked by simulator runner launch failures.
 - Physical iPad interaction and resource profiling: not yet performed.
 
 ## Remaining Definition-of-Done Work
 
 1. Profile loading, memory, rotation, selection, and measurement on supported iPad hardware.
+2. Execute the remaining three UI workflows on a stable simulator or physical test device.

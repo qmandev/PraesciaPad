@@ -21,6 +21,11 @@ struct ContentView: View {
             if case .success(let urls) = result, let url = urls.first { store.open(url) }
             if case .failure(let error) = result { store.state = .failed(error.localizedDescription) }
         }
+        .task {
+#if DEBUG
+            store.configureForUITestingIfNeeded()
+#endif
+        }
     }
 
     @ViewBuilder
@@ -115,6 +120,9 @@ private struct Sidebar: View {
                             .foregroundStyle(Color(red: Double(region.color.x), green: Double(region.color.y), blue: Double(region.color.z)))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("region-visibility-\(region.id)")
+                    .accessibilityLabel("\(region.name) visibility")
+                    .accessibilityValue(store.visibleRegionIDs.contains(region.id) ? "Visible" : "Hidden")
                     Button {
                         store.selectedRegionID = region.id
                     } label: {
@@ -132,6 +140,7 @@ private struct Sidebar: View {
                         .background(store.selectedRegionID == region.id ? Color.white.opacity(0.82) : Color.clear, in: RoundedRectangle(cornerRadius: 12))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("region-select-\(region.id)")
                 }
             }
             FactRow(label: "Segmented total", value: String(format: "%.1f mL", scan.segmentedVolumeML))
@@ -146,9 +155,11 @@ private struct Sidebar: View {
                 Text("This band contains scan voxels in the \(region.name.lowercased()) range. It occupies \(region.volumeML, format: .number.precision(.fractionLength(1))) mL, or \(percentage, format: .number.precision(.fractionLength(1)))% of the segmented volume. Intensity alone does not identify a tissue or medical finding.")
                     .font(.callout)
                     .foregroundStyle(Color.praesciaInk)
+                    .accessibilityIdentifier("region-description")
                 Label("Source: deterministic computed fallback", systemImage: "function")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("description-source")
             } else {
                 Text("Select a band to see its computed summary.").font(.callout)
             }
@@ -165,6 +176,7 @@ private struct Sidebar: View {
         .foregroundStyle(.white)
         .padding(16)
         .background(Color.praesciaInk, in: RoundedRectangle(cornerRadius: 16))
+        .accessibilityIdentifier("safety-notice")
     }
 }
 
@@ -191,6 +203,7 @@ private struct WelcomeView: View {
                 Button("Choose a scan", systemImage: "folder.badge.plus", action: open)
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
+                    .accessibilityIdentifier("welcome-open-scan")
                 Spacer()
                 Text("RESEARCH PROTOTYPE · NOT FOR DIAGNOSIS")
                     .font(.system(size: 12, weight: .bold, design: .rounded))
@@ -226,8 +239,11 @@ private struct ErrorView: View {
             Label("Scan could not be opened", systemImage: "waveform.path.ecg.rectangle")
         } description: {
             Text(message)
+                .accessibilityIdentifier("scan-error-message")
         } actions: {
-            Button("Choose another file", action: retry).buttonStyle(.borderedProminent)
+            Button("Choose another file", action: retry)
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("scan-error-retry")
         }
     }
 }

@@ -76,6 +76,7 @@ struct AnatomyView: View {
                     measuring.toggle()
                 }
                 .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("measure-toggle")
                 Button("Reset view", systemImage: "arrow.counterclockwise") {
                     yaw = 0; pitch = 0; zoom = 1
                 }
@@ -83,14 +84,18 @@ struct AnatomyView: View {
             }
             if measuring {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(measurementText).font(.system(.title3, design: .monospaced).weight(.semibold))
+                    Text(measurementText)
+                        .font(.system(.title3, design: .monospaced).weight(.semibold))
+                        .accessibilityIdentifier("measurement-value")
                     Text("Straight-line distance between two surface points. It is not a path over the surface or a validated clinical measurement.")
                         .font(.caption).foregroundStyle(.secondary).frame(width: 310, alignment: .leading)
                     HStack {
                         Button("Undo", systemImage: "arrow.uturn.backward") { store.undoMeasurementPoint() }
                             .disabled(store.measurementPointsMM.isEmpty)
+                            .accessibilityIdentifier("measurement-undo")
                         Button("Clear", systemImage: "trash") { store.clearMeasurement() }
                             .disabled(store.measurementPointsMM.isEmpty)
+                            .accessibilityIdentifier("measurement-clear")
                     }
                     .font(.caption)
                 }
