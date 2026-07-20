@@ -4,7 +4,8 @@ This protocol verifies F1.1, F4.1, N4.1, and N4.2 on physical iPad hardware. Sim
 
 ## Prerequisites
 
-- A supported iPad running iPadOS 26.4 or later, connected and available to Xcode.
+- A supported iPad running iPadOS 26.4 or later, connected by USB and available to Xcode and Instruments.
+- An Xcode release whose device-support range includes the installed iPadOS version. Holly's iPad on iPadOS 26.5.2 requires Xcode 26.5 or later.
 - Developer Mode enabled and the Mac trusted by the iPad.
 - An Apple development account in Xcode with access to the project's configured signing team; the build permits automatic provisioning updates.
 - The ignored `IXI648-Guys-1107-T1.nii.gz` sample available in the iPad Files app.
@@ -17,9 +18,15 @@ Confirm that the device state is `available`:
 xcrun devicectl list devices
 ```
 
+Also confirm that Instruments lists the iPad under `Devices`, not `Devices Offline`:
+
+```sh
+xcrun xctrace list devices
+```
+
 ## Capture
 
-Run the profiling script with the exact device name or UDID shown by `devicectl`:
+Run the profiling script with the exact device name or identifier shown by `devicectl`:
 
 ```sh
 ./scripts/profile-ipad.sh "Device Name"
@@ -74,4 +81,4 @@ Record one row per physical device and app commit. Do not substitute simulator m
 
 ## Current Availability
 
-On July 20, 2026, `devicectl` listed Holly's iPad, a 9th-generation iPad, as `unavailable`. No physical measurements were recorded. The medium-priority finding remains open until this table contains a completed device run.
+On July 20, 2026, CoreDevice found Holly's 9th-generation iPad with Developer Mode and developer services enabled. The Release build passed. The first network install tunnel disconnected with CoreDevice error 4000; a retry installed and launched the app. After the iPad was connected by USB, unlocked, and kept awake, CoreDevice reported a wired connection, but Instruments continued to list it under `Devices Offline` and Time Profiler timed out waiting for it to boot. The Mac has Xcode 26.4 and the iPhoneOS 26.4 SDK, while the iPad runs iPadOS 26.5.2; Xcode 26.4 device support ends at iPadOS 26.4. The resulting trace bundle was empty and had no template or run metadata, so no valid trace or physical measurement was recorded. Install Xcode 26.5 or later before retrying.

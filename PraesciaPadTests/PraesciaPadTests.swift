@@ -272,6 +272,14 @@ struct PraesciaPadTests {
         )
     }
 
+    @Test func sourceFilePreflightEnforcesMaximumPossibleBudget() throws {
+        try ScanResourceBudget.validateSourceFileSize(ScanResourceBudget.maximumSourceFileBytes)
+
+        #expect(throws: ScanError.self) {
+            try ScanResourceBudget.validateSourceFileSize(ScanResourceBudget.maximumSourceFileBytes + 1)
+        }
+    }
+
     @Test func memoryBudgetRejectsOversizedDecodedVolume() {
         #expect(throws: ScanError.self) {
             try ScanResourceBudget.validateVolume(

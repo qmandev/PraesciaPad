@@ -96,6 +96,15 @@ final class CaseStore {
         defer { if hasAccess { url.stopAccessingSecurityScopedResource() } }
         let worker = Task.detached(priority: .userInitiated) {
             try Task.checkCancellation()
+            let resourceValues = try url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
+            guard resourceValues.isRegularFile != false else {
+                throw ScanError.invalidFile("The selected item is not a regular file.")
+            }
+            guard let fileSize = resourceValues.fileSize else {
+                throw ScanError.invalidFile("Its file size could not be determined safely.")
+            }
+            try ScanResourceBudget.validateSourceFileSize(fileSize)
+            try Task.checkCancellation()
             let data = try Data(contentsOf: url, options: .mappedIfSafe)
             try Task.checkCancellation()
             return try ScanPipeline.process(data)

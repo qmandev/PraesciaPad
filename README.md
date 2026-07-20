@@ -45,6 +45,7 @@ PraesciaPad currently accepts single-file, three-dimensional NIfTI-1 volumes wit
 - Signed or unsigned 8-, 16-, 32-, or 64-bit integer voxels
 - 32- or 64-bit floating-point voxels
 - At most 300 million voxels and a gzip-expanded size no greater than 1 GB
+- A source file no larger than 384 MiB, checked before it is read or mapped
 - An estimated processing working set no greater than 512 MiB, including source buffers, intensities, labels, and runtime headroom
 
 NIfTI-2, paired `.hdr`/`.img` files, multi-frame volumes, complex values, RGB data, and scans without an unambiguous spatial transform are not supported.

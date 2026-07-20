@@ -8,7 +8,7 @@ This status compares the current project with `praesicPadPrompt.md` and `REQUIRE
 
 ## Overall Status
 
-PraesciaPad implements all six core product flows. A fresh audit found no unresolved high-priority code defect. The generic iOS build and the 17-test bundle compile cleanly; the prior 15 tests passed, while execution of the two new malformed-input regressions is blocked by the simulator runner. The sampled-mesh and memory findings are resolved, scene preparation no longer synchronously bakes meshes, and three of four UI workflows execute successfully. Physical-iPad profiling, simulator verification, and exhaustive corruption validation remain outstanding.
+PraesciaPad implements all six core product flows. A fresh audit found no unresolved high- or medium-priority implementation defect outside physical-device verification. The generic iOS build and the 18-test bundle compile cleanly; the prior 15 tests passed, while execution of the three new malformed-input and source-budget regressions remains blocked by Xcode 26.4 test-runner infrastructure. The sampled-mesh and memory findings are resolved, scene preparation no longer synchronously bakes meshes, and three of four UI workflows execute successfully. Physical-iPad profiling, post-update test execution, and the low-priority exhaustive corruption validation remain outstanding.
 
 ## Findings
 
@@ -26,7 +26,7 @@ Affected requirements: F1.4, F3.3, F4.4, and F4.5.
 
 The installed iPad simulator initially failed to launch the test runner, reporting that it was waiting for workers to materialize followed by a CoreSimulator IPC server failure. After a clean simulator restart, the numerical suite executed successfully from `xcodebuild test`.
 
-The Swift Testing suite now contains 17 cases covering affine determinant volume, world-space distance, `sform`, rotated `qform`, near-half-turn quaternion normalization, segmentation consistency, extreme numeric inputs, mesh orientation and proportions, sampled bounds, resource budgeting, invalid files, and asynchronous case lifecycle. The existing 15 cases have passed; the two new numeric-input cases compile but have not executed because of the simulator runner failure.
+The Swift Testing suite now contains 18 cases covering affine determinant volume, world-space distance, `sform`, rotated `qform`, near-half-turn quaternion normalization, segmentation consistency, extreme numeric inputs, mesh orientation and proportions, sampled bounds, resource budgeting, invalid files, and asynchronous case lifecycle. The existing 15 cases have passed; the three new numeric-input and source-budget cases compile but have not executed because of the test-runner failure. A fresh isolated `PraesciaPadTests` run on a cleanly booted iPadOS 26.4 simulator again stopped at `waiting for workers to materialize`. A signed host-Mac fallback reached app launch but the test process was killed before establishing its bootstrap connection. Neither attempt reached a test assertion.
 
 Affected requirements: N5.2 and the definition of done.
 
@@ -45,6 +45,14 @@ The parser previously converted a finite but out-of-range NIfTI voxel offset dir
 Voxel offsets are now bounded by the actual file size before conversion. Scaled intensities must fit the processing buffer's finite `Float` range, and histogram normalization widens operands before subtraction and validates the normalized value before converting it to a bin. Regression tests cover both formerly trapping inputs and compile successfully. Their simulator execution remains pending because Xcode could not materialize the test worker, including after a clean simulator reboot with parallel testing disabled.
 
 Affected requirement: F1.3.
+
+#### Resolved in code: source size is checked before loading
+
+The security-scoped URL was previously passed to `Data(contentsOf:)` before any resource limit was enforced. Although `.mappedIfSafe` normally avoids an eager copy, Foundation may fall back to reading the file, so an oversized or provider-backed input could consume memory before parser validation.
+
+The detached loader now reads the regular-file metadata first and rejects sources above 384 MiB before allocating or mapping `Data`. That ceiling is the largest source that could possibly fit the 512 MiB processing budget after reserving 128 MiB of runtime headroom; accepted files still undergo the more precise gzip and decoded-volume checks. A boundary regression test compiles with the test bundle.
+
+Affected requirements: F1.3 and N4.2.
 
 ### Medium
 
@@ -80,7 +88,7 @@ RealityKit mesh resources now use the framework's nonisolated asynchronous initi
 
 An optimized, repeatable physical-device workflow now exists in `scripts/profile-ipad.sh` and `physicalProfiling.md`. It installs a Release build and captures Time Profiler, Allocations, Animation Hitches, and RealityKit traces across controlled loading and interaction scenarios. The protocol defines memory, frame-rate, hitch, responsiveness, and repeated-open/close gates without persisting scan data or committing trace artifacts.
 
-Execution is currently blocked by device availability. On July 20, 2026, CoreDevice listed the registered 9th-generation test iPad as `unavailable`, so no physical measurements are claimed.
+Execution is currently blocked by Xcode device support. On July 20, 2026, CoreDevice found the 9th-generation test iPad with Developer Mode and developer services enabled. The Release build passed. After one network install tunnel disconnected with CoreDevice error 4000, a retry installed and launched the app successfully. With the iPad subsequently connected by USB, unlocked, and awake, CoreDevice reported a wired connection, but Instruments continued to list it offline and Time Profiler timed out waiting for it. The Mac has Xcode 26.4 and the iPhoneOS 26.4 SDK, while the iPad runs iPadOS 26.5.2; Xcode 26.4 device support ends at iPadOS 26.4. The trace bundle is empty and invalid, no physical measurements are claimed, and the next attempt requires Xcode 26.5 or later.
 
 Affected requirements: F1.1, F4.1, N4.1, and N4.2.
 
@@ -120,7 +128,8 @@ The parser validates the NIfTI magic prefix but not its required fourth null byt
 - Sample segmentation: three deterministic non-empty intensity bands.
 - Swift test bundle compilation: passed.
 - Swift test execution on the iPad (A16) simulator before the latest additions: 15 of 15 passed.
-- Out-of-range voxel-offset and full finite-intensity-range regression tests: compiled; execution blocked while waiting for the simulator worker to materialize.
+- Out-of-range voxel-offset, full finite-intensity-range, and source-file preflight regression tests: compiled; isolated execution remained blocked while waiting for the simulator worker to materialize.
+- Signed host-Mac unit-test fallback: built and installed; the test process was killed before establishing its bootstrap connection, with no assertion executed.
 - Newer-import precedence and close-case invalidation tests: passed.
 - Asymmetric RAS-to-RealityKit orientation fixture: passed without reflection.
 - Anisotropic generated-mesh extent fixture: passed.
@@ -130,10 +139,10 @@ The parser validates the NIfTI magic prefix but not its required fourth null byt
 - Welcome, recoverable-error, and loaded-scan UI workflows: passed.
 - Measurement control accessibility defect: fixed; post-fix execution blocked by simulator runner launch failure.
 - Physical iPad interaction and resource profiling: not yet performed.
-- Physical profiling harness and acceptance protocol: implemented; device currently unavailable.
+- Physical profiling harness and acceptance protocol: implemented; USB connectivity is confirmed, but Instruments capture requires Xcode 26.5 or later for the iPadOS 26.5.2 device.
 
 ## Remaining Definition-of-Done Work
 
-1. Connect and unlock a supported iPad, run `scripts/profile-ipad.sh`, record the results in `physicalProfiling.md`, and use them to validate or tune the 512 MiB budget.
-2. Execute the two new malformed-numeric-input regressions and the post-fix measurement workflow on a stable simulator or physical test device.
+1. After installing Xcode 26.5 or later, run `scripts/profile-ipad.sh` on the connected iPad, record the results in `physicalProfiling.md`, and use them to validate or tune the 512 MiB budget.
+2. After the macOS and Xcode update, execute the three new malformed-input and source-budget regressions and the post-fix measurement workflow.
 3. Validate the complete NIfTI magic field and optional gzip header CRC.

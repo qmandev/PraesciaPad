@@ -18,6 +18,20 @@ enum ScanError: LocalizedError, Sendable {
 enum ScanResourceBudget {
     static let maximumWorkingSetBytes = 512 * 1_024 * 1_024
     private static let runtimeHeadroomBytes = 128 * 1_024 * 1_024
+    static let maximumSourceFileBytes = maximumWorkingSetBytes - runtimeHeadroomBytes
+
+    static func validateSourceFileSize(_ sourceBytes: Int) throws {
+        guard sourceBytes >= 0 else {
+            throw ScanError.invalidFile("Its file size is invalid.")
+        }
+        guard sourceBytes <= maximumSourceFileBytes else {
+            let sourceMiB = Int(ceil(Double(sourceBytes) / Double(1_024 * 1_024)))
+            let limitMiB = maximumSourceFileBytes / (1_024 * 1_024)
+            throw ScanError.unsupported(
+                "Its source file is \(sourceMiB) MiB, above the \(limitMiB) MiB preflight limit."
+            )
+        }
+    }
 
     static func validateVolume(
         compressedSourceBytes: Int,
