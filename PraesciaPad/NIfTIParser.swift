@@ -136,13 +136,26 @@ enum NIfTIParser {
     }
 
     private static func quaternionAffine(reader: DataReader) throws -> simd_double4x4 {
-        let b = Double(try reader.float32(at: 256))
-        let c = Double(try reader.float32(at: 260))
-        let d = Double(try reader.float32(at: 264))
-        var aSquared = 1 - (b * b + c * c + d * d)
+        var b = Double(try reader.float32(at: 256))
+        var c = Double(try reader.float32(at: 260))
+        var d = Double(try reader.float32(at: 264))
+        let vectorSquared = b * b + c * c + d * d
+        guard vectorSquared.isFinite else { throw ScanError.invalidFile("Its qform quaternion is invalid.") }
+        let aSquared = 1 - vectorSquared
         if aSquared < -1e-5 { throw ScanError.invalidFile("Its qform quaternion is invalid.") }
-        aSquared = max(0, aSquared)
-        let a = sqrt(aSquared)
+        let a: Double
+        if aSquared < 1e-7 {
+            // NIfTI permits rounding around a 180-degree rotation; normalize the vector
+            // components so that rounding cannot introduce scale into the affine.
+            guard vectorSquared > 0 else { throw ScanError.invalidFile("Its qform quaternion is invalid.") }
+            let inverseLength = 1 / sqrt(vectorSquared)
+            b *= inverseLength
+            c *= inverseLength
+            d *= inverseLength
+            a = 0
+        } else {
+            a = sqrt(aSquared)
+        }
         let dx = abs(Double(try reader.float32(at: 80)))
         let dy = abs(Double(try reader.float32(at: 84)))
         let dz = abs(Double(try reader.float32(at: 88)))

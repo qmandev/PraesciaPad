@@ -81,6 +81,28 @@ struct PraesciaPadTests {
         )) + 24) < 1e-4)
     }
 
+    @Test func parserNormalizesNearHalfTurnQFormQuaternion() throws {
+        var fixture = makeNIfTI(
+            dimensions: SIMD3(2, 2, 2),
+            affineRows: [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]],
+            values: Array(0..<8).map(Int16.init)
+        )
+        fixture.writeInt16(1, at: 252)
+        fixture.writeInt16(0, at: 254)
+        fixture.writeFloat(2, at: 80)
+        fixture.writeFloat(3, at: 84)
+        fixture.writeFloat(4, at: 88)
+        fixture.writeFloat(1.000002, at: 256)
+
+        let volume = try NIfTIParser.parse(fixture)
+        let affine = volume.metadata.affineMM
+
+        #expect(abs(simd_length(SIMD3(affine.columns.0.x, affine.columns.0.y, affine.columns.0.z)) - 2) < 1e-10)
+        #expect(abs(simd_length(SIMD3(affine.columns.1.x, affine.columns.1.y, affine.columns.1.z)) - 3) < 1e-10)
+        #expect(abs(simd_length(SIMD3(affine.columns.2.x, affine.columns.2.y, affine.columns.2.z)) - 4) < 1e-10)
+        #expect(abs(volume.metadata.voxelVolumeMM3 - 24) < 1e-10)
+    }
+
     @Test func segmentationVolumesUseAllVoxelsAndSumExactly() throws {
         let affine = simd_double4x4(
             SIMD4(0, 2, 0, 0), SIMD4(-3, 0, 0, 0),
