@@ -152,18 +152,27 @@ struct AnatomyView: View {
             entity.generateCollisionShapes(recursive: false)
             root.addChild(entity)
         }
-    }
-
-    private func updateMarkers() {
-        for child in root.children where child.name.hasPrefix("measure-marker-") { child.removeFromParent() }
-        for (index, point) in store.measurementPointsMM.enumerated() {
+        for index in 0..<2 {
             let marker = ModelEntity(
                 mesh: .generateSphere(radius: 3.2),
                 materials: [SimpleMaterial(color: .white, isMetallic: true)]
             )
             marker.name = "measure-marker-\(index)"
-            marker.position = SIMD3(Float(point.x), Float(point.y), Float(point.z))
+            marker.isEnabled = false
             root.addChild(marker)
+        }
+    }
+
+    private func updateMarkers() {
+        for index in 0..<2 {
+            guard let marker = root.findEntity(named: "measure-marker-\(index)") else { continue }
+            guard store.measurementPointsMM.indices.contains(index) else {
+                marker.isEnabled = false
+                continue
+            }
+            let point = store.measurementPointsMM[index]
+            marker.position = SIMD3(Float(point.x), Float(point.y), Float(point.z))
+            marker.isEnabled = true
         }
     }
 

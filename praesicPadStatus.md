@@ -1,6 +1,6 @@
 # PraesciaPad Implementation Status
 
-Audit date: July 19, 2026
+Audit date: July 20, 2026
 
 ## Scope
 
@@ -8,7 +8,7 @@ This status compares the current project with `praesicPadPrompt.md` and `REQUIRE
 
 ## Overall Status
 
-PraesciaPad implements all six core product flows, and both high-priority audit findings are resolved. The generic iOS build and all seven numerical tests pass from the command line, and the supplied research scan processes successfully through the numerical core. Direct rendered-orientation tests and physical-iPad performance verification remain outstanding acceptance checks.
+PraesciaPad implements all six core product flows. Both high-priority findings and the testable medium-priority geometry finding are resolved. The generic iOS build and all nine numerical and geometry tests pass from the command line, and the supplied research scan processes successfully through the numerical core. Physical-iPad performance and memory verification remain outstanding acceptance checks.
 
 ## Findings
 
@@ -32,13 +32,17 @@ Affected requirements: N5.2 and the definition of done.
 
 ### Medium
 
-#### Rendered orientation and proportions lack direct tests
+#### Resolved: rendered orientation and physical proportions
 
-The parser tests cover affine construction, anisotropic spacing, rotations, negative slice direction, determinant volume, and world-space distance. They do not directly assert the final RAS-to-RealityKit coordinate conversion or generated mesh coordinates. Consequently, F4.4 and F4.5 are implemented but not independently proven by automated geometry tests.
+The test target now exercises final generated mesh positions rather than only affine parsing. An asymmetric landmark fixture verifies that right, anterior, and superior RAS directions map to the intended RealityKit axes without reflection. A second fixture verifies exact physical mesh extents for anisotropic voxels.
+
+Affected requirements: F4.4, F4.5, and N5.3.
 
 #### Hardware performance and memory remain unverified
 
 The supplied scan is reduced to sampled surface geometry while full-resolution voxel counts remain in use for reported volumes. The UI discloses this reduction. Interactive frame rate, collision generation cost, loading responsiveness, and peak memory have not been measured on physical iPad hardware.
+
+As a code-level improvement, the RealityKit scene now creates its two measurement markers once and updates only their positions and visibility. Dragging, zooming, undoing, and clearing measurements no longer destroy and recreate mesh entities during view updates. This removes known per-frame allocation work, but it does not replace hardware profiling.
 
 Affected requirements: F1.1, F4.1, N4.1, and N4.2.
 
@@ -67,11 +71,11 @@ The UI test target contains generated launch and launch-performance tests but no
 - Sample acquisition result: `256 x 256 x 150` voxels at approximately `0.9375 x 0.9375 x 1.200004 mm`.
 - Sample segmentation: three deterministic non-empty intensity bands.
 - Swift test bundle compilation: passed.
-- Swift test execution on the iPad (A16) simulator: seven of seven passed.
+- Swift test execution on the iPad (A16) simulator: nine of nine passed.
+- Asymmetric RAS-to-RealityKit orientation fixture: passed without reflection.
+- Anisotropic generated-mesh extent fixture: passed.
 - Physical iPad interaction and resource profiling: not yet performed.
 
 ## Remaining Definition-of-Done Work
 
-1. Add direct tests for final mesh proportions and anatomical coordinate conversion.
-2. Validate orientation using a known asymmetric fixture or orientation landmark.
-3. Profile loading, memory, rotation, selection, and measurement on supported iPad hardware.
+1. Profile loading, memory, rotation, selection, and measurement on supported iPad hardware.

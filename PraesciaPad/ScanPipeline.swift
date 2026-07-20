@@ -115,7 +115,7 @@ enum ScanPipeline {
         return bestThreshold
     }
 
-    private static func buildMeshes(labels: [UInt8], metadata: ScanMetadata) -> (meshes: [RegionMesh], stride: Int) {
+    static func buildMeshes(labels: [UInt8], metadata: ScanMetadata) -> (meshes: [RegionMesh], stride: Int) {
         let dimensions = metadata.dimensions
         let stride = max(1, Int(ceil(Double(max(dimensions.x, max(dimensions.y, dimensions.z))) / 36.0)))
         let center = displayCenter(metadata: metadata)

@@ -126,6 +126,54 @@ struct PraesciaPadTests {
         #expect(result.labels.count == 64)
     }
 
+    @Test func meshCoordinatesPreserveRASOrientationForAsymmetricLandmarks() throws {
+        let dimensions = SIMD3(3, 3, 3)
+        let metadata = ScanMetadata(
+            dimensions: dimensions,
+            voxelSizeMM: SIMD3(repeating: 1),
+            dataType: "test",
+            affineMM: matrix_identity_double4x4,
+            voxelVolumeMM3: 1
+        )
+        var labels = [UInt8](repeating: 0, count: 27)
+        labels[voxelIndex(SIMD3(2, 1, 1), dimensions: dimensions)] = 1 // Right
+        labels[voxelIndex(SIMD3(1, 2, 1), dimensions: dimensions)] = 2 // Anterior
+        labels[voxelIndex(SIMD3(1, 1, 2), dimensions: dimensions)] = 3 // Superior
+
+        let result = ScanPipeline.buildMeshes(labels: labels, metadata: metadata)
+        let right = try meshCentroid(result.meshes, id: 1)
+        let anterior = try meshCentroid(result.meshes, id: 2)
+        let superior = try meshCentroid(result.meshes, id: 3)
+
+        #expect(result.stride == 1)
+        #expect(simd_distance(right, SIMD3(1, 0, 0)) < 1e-6)
+        #expect(simd_distance(anterior, SIMD3(0, 0, -1)) < 1e-6)
+        #expect(simd_distance(superior, SIMD3(0, 1, 0)) < 1e-6)
+        #expect(simd_determinant(simd_float3x3(right, anterior, superior)) > 0)
+    }
+
+    @Test func meshExtentsPreserveAnisotropicPhysicalProportions() throws {
+        let dimensions = SIMD3(3, 4, 5)
+        let affine = simd_double4x4(diagonal: SIMD4(2, 3, 4, 1))
+        let metadata = ScanMetadata(
+            dimensions: dimensions,
+            voxelSizeMM: SIMD3(2, 3, 4),
+            dataType: "test",
+            affineMM: affine,
+            voxelVolumeMM3: 24
+        )
+        let result = ScanPipeline.buildMeshes(
+            labels: [UInt8](repeating: 1, count: dimensions.x * dimensions.y * dimensions.z),
+            metadata: metadata
+        )
+        let mesh = try #require(result.meshes.first { $0.id == 1 })
+        let bounds = try meshBounds(mesh.positionsMM)
+        let extents = bounds.maximum - bounds.minimum
+
+        #expect(result.stride == 1)
+        #expect(simd_distance(extents, SIMD3(6, 20, 12)) < 1e-6)
+    }
+
     @Test func corruptAndAmbiguousFilesFailClearly() {
         #expect(throws: ScanError.self) { try NIfTIParser.parse(Data(repeating: 0, count: 40)) }
 
@@ -136,6 +184,25 @@ struct PraesciaPadTests {
         )
         missingTransform.writeInt16(0, at: 254)
         #expect(throws: ScanError.self) { try NIfTIParser.parse(missingTransform) }
+    }
+}
+
+private func voxelIndex(_ voxel: SIMD3<Int>, dimensions: SIMD3<Int>) -> Int {
+    voxel.x + dimensions.x * (voxel.y + dimensions.y * voxel.z)
+}
+
+private func meshCentroid(_ meshes: [RegionMesh], id: UInt8) throws -> SIMD3<Float> {
+    let mesh = try #require(meshes.first { $0.id == id })
+    let positions = mesh.positionsMM
+    try #require(!positions.isEmpty)
+    return positions.reduce(.zero, +) / Float(positions.count)
+}
+
+private func meshBounds(_ positions: [SIMD3<Float>]) throws -> (minimum: SIMD3<Float>, maximum: SIMD3<Float>) {
+    let first = try #require(positions.first)
+    return positions.dropFirst().reduce(into: (minimum: first, maximum: first)) { bounds, point in
+        bounds.minimum = simd_min(bounds.minimum, point)
+        bounds.maximum = simd_max(bounds.maximum, point)
     }
 }
 
