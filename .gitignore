@@ -1,0 +1,13 @@
+# macOS metadata
+.DS_Store
+
+# Xcode per-user workspace state
+*.xcuserstate
+**/xcuserdata/
+
+# Local scan data
+IXI648-Guys-1107-T1.nii.gz
+
+# Local project instructions
+REQUIREMENTS.md
+praesicPadPrompt.md
