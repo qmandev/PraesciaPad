@@ -12,7 +12,7 @@ This protocol verifies F1.1, F4.1, N4.1, and N4.2 on physical iPad hardware. Sim
 - The iPad disconnected from external displays and Low Power Mode disabled.
 - At least 2 GB of free Mac storage for DerivedData and Instruments traces, plus enough iPad storage for the app.
 
-Confirm that the device state is `available`:
+Confirm that the device state is `connected` or `available`:
 
 ```sh
 xcrun devicectl list devices

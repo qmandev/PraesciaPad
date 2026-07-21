@@ -18,7 +18,7 @@ APP_PATH="${DERIVED_DATA}/Build/Products/Release-iphoneos/PraesciaPad.app"
 mkdir -p "$OUTPUT_DIRECTORY"
 
 DEVICE_LINE="$(xcrun devicectl list devices | grep -F "$DEVICE" | head -n 1 || true)"
-if [[ -z "$DEVICE_LINE" || "$DEVICE_LINE" != *" available "* ]]; then
+if [[ -z "$DEVICE_LINE" || ( "$DEVICE_LINE" != *" connected "* && "$DEVICE_LINE" != *" available "* ) ]]; then
     echo "The requested physical device is not available to Xcode: $DEVICE" >&2
     echo "Connect and unlock it, trust this Mac, enable Developer Mode, then retry." >&2
     exit 69
