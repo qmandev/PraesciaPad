@@ -10,6 +10,16 @@ The current build is a minimum viable product and proof of concept. It implement
 
 The app is not production- or clinical-ready. Broader input validation, clinical validation, accessibility review, device-matrix testing, and performance tuning for the eventual deployment hardware remain outside the current POC scope. Physical-device optimization is deferred until a newer target iPad is available; measurements from the existing 9th-generation iPad are retained only as a preliminary baseline.
 
+## Codex GPT-5.6 Vibe Coding
+
+PraesciaPad was created through interactive vibe coding with Codex and GPT-5.6. Development began with a starter iOS project plus `praesciaPadPrompt.md`, which described the product vision, and `REQUIREMENTS.md`, which defined the functional, numerical, privacy, safety, and verification expectations. Those documents remained the source of truth throughout the build rather than serving as a one-time code-generation prompt.
+
+Through an iterative conversation, Codex inspected the existing project, translated the requirements into the application design, implemented each workflow, ran Xcode builds and tests, audited the results, prioritized defects, and hardened the code. The same process informed the choice of SwiftUI for the interface and RealityKit for native, interactive 3D rendering on iPad. It also produced the NIfTI parser, deterministic Otsu and histogram-based segmentation, affine-aware volume calculations, sampled mesh generation, selection and measurement interactions, resource limits, and asynchronous case lifecycle.
+
+The vibe-coding loop continued beyond feature implementation. Codex created numerical and UI regression tests, repeatedly checked the app against the requirements, installed the Release build on a physical iPad, and developed `scripts/profile-ipad.sh` and `physicalProfiling.md` for repeatable Instruments profiling. Loading, allocations, animation hitches, and rendering behavior were then exercised interactively on the device.
+
+This workflow combined rapid prompt-driven experimentation with concrete engineering guardrails: documented requirements, recoverable errors, automated tests, quantitative geometry checks, physical-device evidence, and explicit non-diagnostic boundaries. The result progressed from a starter project to a functional PraesciaPad MVP through one continuous, human-directed Codex/GPT-5.6 development session.
+
 ## Features
 
 - Imports single-file NIfTI-1 scans in `.nii` or gzip-compressed `.nii.gz` format.
