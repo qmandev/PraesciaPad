@@ -8,6 +8,17 @@
 # Local Instruments captures
 *.trace/
 
+# Local screen recordings, demo captures, and thumbnails. The recordings run to
+# hundreds of MB and several exceed GitHub's 100 MB per-file limit, so a stray
+# `git add -A` would produce a push that is rejected after the objects are
+# already committed.
+#
+# The leading slash anchors these to the repo root, so image assets under
+# Assets.xcassets are still tracked normally. An unanchored *.png would silently
+# skip app icons and fail the build on a missing resource.
+/*.mov
+/*.png
+
 # Local scan data
 IXI648-Guys-1107-T1.nii.gz
 
