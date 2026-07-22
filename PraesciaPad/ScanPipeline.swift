@@ -131,7 +131,8 @@ enum ScanPipeline {
     static func buildMeshes(labels: [UInt8], metadata: ScanMetadata) -> (meshes: [RegionMesh], stride: Int) {
         let dimensions = metadata.dimensions
         let stride = max(1, Int(ceil(Double(max(dimensions.x, max(dimensions.y, dimensions.z))) / 36.0)))
-        let center = displayCenter(metadata: metadata)
+        let coordinateSpace = metadata.coordinateSpace
+        let reversesHandedness = affineReversesHandedness(metadata.affineMM)
         var positions = [[SIMD3<Float>]](repeating: [], count: 4)
         var indices = [[UInt32]](repeating: [], count: 4)
 
@@ -165,7 +166,8 @@ enum ScanPipeline {
                         minimum: minimum,
                         maximum: maximum,
                         affine: metadata.affineMM,
-                        displayCenter: center,
+                        coordinateSpace: coordinateSpace,
+                        reversesHandedness: reversesHandedness,
                         positions: &positions[Int(label)],
                         indices: &indices[Int(label)]
                     )
@@ -199,21 +201,12 @@ enum ScanPipeline {
         )
     }
 
-    private static func displayCenter(metadata: ScanMetadata) -> SIMD3<Double> {
-        let maximum = SIMD3<Double>(
-            Double(metadata.dimensions.x - 1),
-            Double(metadata.dimensions.y - 1),
-            Double(metadata.dimensions.z - 1)
-        )
-        let world = PhysicalMath.worldPoint(voxel: maximum / 2, affine: metadata.affineMM)
-        return realityCoordinates(world)
-    }
-
     private static func appendVoxelBlock(
         minimum: SIMD3<Double>,
         maximum: SIMD3<Double>,
         affine: simd_double4x4,
-        displayCenter: SIMD3<Double>,
+        coordinateSpace: ScanCoordinateSpace,
+        reversesHandedness: Bool,
         positions: inout [SIMD3<Float>],
         indices: inout [UInt32]
     ) {
@@ -225,19 +218,32 @@ enum ScanPipeline {
         ]
         let base = UInt32(positions.count)
         positions.append(contentsOf: corners.map { corner in
-            let world = PhysicalMath.worldPoint(voxel: corner, affine: affine)
-            return SIMD3<Float>(realityCoordinates(world) - displayCenter)
+            let ras = PhysicalMath.worldPoint(voxel: corner, affine: affine)
+            return SIMD3<Float>(coordinateSpace.displayPoint(rasMM: ras))
         })
         let cubeIndices: [UInt32] = [
             0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7,
             0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2,
             0, 4, 7, 0, 7, 3, 1, 2, 6, 1, 6, 5
         ]
-        indices.append(contentsOf: cubeIndices.map { base + $0 })
+        for offset in stride(from: 0, to: cubeIndices.count, by: 3) {
+            indices.append(base + cubeIndices[offset])
+            if reversesHandedness {
+                indices.append(base + cubeIndices[offset + 2])
+                indices.append(base + cubeIndices[offset + 1])
+            } else {
+                indices.append(base + cubeIndices[offset + 1])
+                indices.append(base + cubeIndices[offset + 2])
+            }
+        }
     }
 
-    private static func realityCoordinates(_ ras: SIMD3<Double>) -> SIMD3<Double> {
-        // NIfTI world space is RAS; RealityKit is x-right, y-up, with the camera facing -z.
-        SIMD3(ras.x, ras.z, -ras.y)
+    private static func affineReversesHandedness(_ affine: simd_double4x4) -> Bool {
+        let linear = simd_double3x3(
+            SIMD3(affine.columns.0.x, affine.columns.0.y, affine.columns.0.z),
+            SIMD3(affine.columns.1.x, affine.columns.1.y, affine.columns.1.z),
+            SIMD3(affine.columns.2.x, affine.columns.2.y, affine.columns.2.z)
+        )
+        return simd_determinant(linear) < 0
     }
 }

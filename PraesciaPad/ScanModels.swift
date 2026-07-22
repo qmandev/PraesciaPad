@@ -97,6 +97,34 @@ struct ScanMetadata: Sendable, Equatable {
     let voxelVolumeMM3: Double
 
     var voxelCount: Int { dimensions.x * dimensions.y * dimensions.z }
+
+    var coordinateSpace: ScanCoordinateSpace {
+        ScanCoordinateSpace(dimensions: dimensions, affineMM: affineMM)
+    }
+}
+
+struct ScanCoordinateSpace: Sendable, Equatable {
+    let centerRASMM: SIMD3<Double>
+
+    init(dimensions: SIMD3<Int>, affineMM: simd_double4x4) {
+        let maximum = SIMD3<Double>(
+            Double(dimensions.x - 1),
+            Double(dimensions.y - 1),
+            Double(dimensions.z - 1)
+        )
+        centerRASMM = PhysicalMath.worldPoint(voxel: maximum / 2, affine: affineMM)
+    }
+
+    func displayPoint(rasMM: SIMD3<Double>) -> SIMD3<Double> {
+        let centered = rasMM - centerRASMM
+        // The reset view looks from anterior toward posterior: patient right appears on
+        // screen-left, superior is up, and anterior points toward the RealityKit camera.
+        return SIMD3(-centered.x, centered.z, centered.y)
+    }
+
+    func rasPoint(displayMM: SIMD3<Double>) -> SIMD3<Double> {
+        centerRASMM + SIMD3(-displayMM.x, displayMM.z, displayMM.y)
+    }
 }
 
 struct ScanVolume: Sendable {

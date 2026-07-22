@@ -5,6 +5,7 @@ import UIKit
 struct AnatomyView: View {
     let scan: ProcessedScan
     let store: CaseStore
+    var showsClinicalTools = true
 
     @State private var root = Entity()
     @State private var yaw: Float = 0
@@ -57,8 +58,10 @@ struct AnatomyView: View {
             .simultaneousGesture(zoomGesture)
             .simultaneousGesture(tapGesture)
 
-            controls
-                .padding(22)
+            if showsClinicalTools {
+                controls
+                    .padding(22)
+            }
 
             if sceneIsLoading {
                 ProgressView("Preparing 3D scene…")
@@ -102,18 +105,24 @@ struct AnatomyView: View {
                         .font(.caption).foregroundStyle(.secondary).frame(width: 310, alignment: .leading)
                     HStack {
                         Button("Undo", systemImage: "arrow.uturn.backward") { store.undoMeasurementPoint() }
-                            .disabled(store.measurementPointsMM.isEmpty)
+                            .disabled(store.measurementPointsRASMM.isEmpty)
                             .accessibilityIdentifier("measurement-undo")
                         Button("Clear", systemImage: "trash") { store.clearMeasurement() }
-                            .disabled(store.measurementPointsMM.isEmpty)
+                            .disabled(store.measurementPointsRASMM.isEmpty)
                             .accessibilityIdentifier("measurement-clear")
                     }
                     .font(.caption)
+                    ForEach(store.measurementPointsRASMM.indices, id: \.self) { index in
+                        Text(coordinateText(index: index, point: store.measurementPointsRASMM[index]))
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("measurement-point-\(index + 1)-coordinates")
+                    }
                 }
                 .padding(14)
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
             }
-            Text("Drag to rotate · Pinch to zoom · Tap to select")
+            Text("Reset view: anterior (RAS) · Drag to rotate · Pinch to zoom · Tap to select")
                 .font(.caption).foregroundStyle(.white.opacity(0.62))
         }
         .foregroundStyle(.white)
@@ -121,7 +130,11 @@ struct AnatomyView: View {
 
     private var measurementText: String {
         if let distance = store.distanceMM { return String(format: "%.1f mm", distance) }
-        return "Tap point \(store.measurementPointsMM.count + 1) of 2"
+        return "Tap point \(store.measurementPointsRASMM.count + 1) of 2"
+    }
+
+    private func coordinateText(index: Int, point: SIMD3<Double>) -> String {
+        String(format: "P%d RAS: (%.1f, %.1f, %.1f) mm", index + 1, point.x, point.y, point.z)
     }
 
     private var rotationGesture: some Gesture {
@@ -144,10 +157,11 @@ struct AnatomyView: View {
             .targetedToAnyEntity()
             .onEnded { value in
                 guard let regionID = regionID(for: value.entity) else { return }
-                if measuring {
+                if measuring && showsClinicalTools {
                     guard let hit = value.hitTest(point: value.location, in: .local).first else { return }
                     let localPoint = root.convert(position: hit.position, from: nil)
-                    store.addMeasurementPoint(SIMD3(Double(localPoint.x), Double(localPoint.y), Double(localPoint.z)))
+                    let displayPoint = SIMD3(Double(localPoint.x), Double(localPoint.y), Double(localPoint.z))
+                    store.addMeasurementPoint(rasMM: scan.metadata.coordinateSpace.rasPoint(displayMM: displayPoint))
                 } else {
                     store.selectedRegionID = regionID
                 }
@@ -182,12 +196,16 @@ struct AnatomyView: View {
     private func updateMarkers() {
         for index in 0..<2 {
             guard let marker = root.findEntity(named: "measure-marker-\(index)") else { continue }
-            guard store.measurementPointsMM.indices.contains(index) else {
+            guard showsClinicalTools else {
                 marker.isEnabled = false
                 continue
             }
-            let point = store.measurementPointsMM[index]
-            marker.position = SIMD3(Float(point.x), Float(point.y), Float(point.z))
+            guard store.measurementPointsRASMM.indices.contains(index) else {
+                marker.isEnabled = false
+                continue
+            }
+            let rasPoint = store.measurementPointsRASMM[index]
+            marker.position = SIMD3<Float>(scan.metadata.coordinateSpace.displayPoint(rasMM: rasPoint))
             marker.isEnabled = true
         }
     }

@@ -17,7 +17,7 @@ final class CaseStore {
     var state: State = .empty
     var selectedRegionID: UInt8?
     var visibleRegionIDs: Set<UInt8> = [1, 2, 3]
-    var measurementPointsMM: [SIMD3<Double>] = []
+    var measurementPointsRASMM: [SIMD3<Double>] = []
 
     @ObservationIgnored private let scanLoader: ScanLoader
     @ObservationIgnored private var loadTask: Task<Void, Never>?
@@ -36,7 +36,7 @@ final class CaseStore {
         let generation = invalidatePendingLoad()
         state = .loading("Reading and validating scan…")
         selectedRegionID = nil
-        measurementPointsMM.removeAll(keepingCapacity: false)
+        measurementPointsRASMM.removeAll(keepingCapacity: false)
         visibleRegionIDs = [1, 2, 3]
 
         let loader = scanLoader
@@ -63,24 +63,24 @@ final class CaseStore {
         state = .empty
         selectedRegionID = nil
         visibleRegionIDs.removeAll(keepingCapacity: false)
-        measurementPointsMM.removeAll(keepingCapacity: false)
+        measurementPointsRASMM.removeAll(keepingCapacity: false)
     }
 
     func toggleVisibility(_ id: UInt8) {
         if visibleRegionIDs.contains(id) { visibleRegionIDs.remove(id) } else { visibleRegionIDs.insert(id) }
     }
 
-    func addMeasurementPoint(_ point: SIMD3<Double>) {
-        if measurementPointsMM.count == 2 { measurementPointsMM.removeAll(keepingCapacity: true) }
-        measurementPointsMM.append(point)
+    func addMeasurementPoint(rasMM point: SIMD3<Double>) {
+        if measurementPointsRASMM.count == 2 { measurementPointsRASMM.removeAll(keepingCapacity: true) }
+        measurementPointsRASMM.append(point)
     }
 
-    func undoMeasurementPoint() { if !measurementPointsMM.isEmpty { measurementPointsMM.removeLast() } }
-    func clearMeasurement() { measurementPointsMM.removeAll(keepingCapacity: true) }
+    func undoMeasurementPoint() { if !measurementPointsRASMM.isEmpty { measurementPointsRASMM.removeLast() } }
+    func clearMeasurement() { measurementPointsRASMM.removeAll(keepingCapacity: true) }
 
     var distanceMM: Double? {
-        guard measurementPointsMM.count == 2 else { return nil }
-        return PhysicalMath.distanceMM(measurementPointsMM[0], measurementPointsMM[1])
+        guard measurementPointsRASMM.count == 2 else { return nil }
+        return PhysicalMath.distanceMM(measurementPointsRASMM[0], measurementPointsRASMM[1])
     }
 
     @discardableResult

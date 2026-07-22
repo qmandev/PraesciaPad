@@ -4,13 +4,20 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @State private var store = CaseStore()
     @State private var presentsImporter = false
+    @State private var isPatientFacing = false
 
     var body: some View {
-        NavigationSplitView {
-            Sidebar(store: store, presentsImporter: $presentsImporter)
-                .navigationSplitViewColumnWidth(min: 310, ideal: 360, max: 430)
-        } detail: {
-            detail
+        ZStack(alignment: .top) {
+            if isPatientFacing, let scan = store.scan {
+                PatientFacingView(scan: scan, store: store)
+            } else {
+                clinicianWorkspace
+            }
+
+            if store.scan != nil {
+                presentationToggle
+                    .padding(.top, 12)
+            }
         }
         .tint(.praesciaAmber)
         .fileImporter(
@@ -26,6 +33,32 @@ struct ContentView: View {
             store.configureForUITestingIfNeeded()
 #endif
         }
+        .onChange(of: store.scan == nil) { _, scanIsClosed in
+            if scanIsClosed { isPatientFacing = false }
+        }
+    }
+
+    private var clinicianWorkspace: some View {
+        NavigationSplitView {
+            Sidebar(store: store, presentsImporter: $presentsImporter)
+                .navigationSplitViewColumnWidth(min: 310, ideal: 360, max: 430)
+        } detail: {
+            detail
+        }
+    }
+
+    private var presentationToggle: some View {
+        Toggle(isOn: $isPatientFacing) {
+            Label("Patient-facing mode", systemImage: "person.crop.circle")
+        }
+        .toggleStyle(.switch)
+        .font(.headline)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.ultraThinMaterial, in: Capsule())
+        .shadow(color: .black.opacity(0.16), radius: 12, y: 5)
+        .accessibilityIdentifier("patient-facing-toggle")
+        .accessibilityHint("Changes presentation only. It does not restrict access to the scan or protect data.")
     }
 
     @ViewBuilder
@@ -40,6 +73,102 @@ struct ContentView: View {
         case .loaded(let scan):
             AnatomyView(scan: scan, store: store)
         }
+    }
+}
+
+enum PatientFacingNarrative {
+    static func description(for region: Region?) -> String {
+        guard let region else {
+            return "This model shows color bands computed from this scan. The bands group scan voxels by intensity only. They are not anatomical tissue labels and do not identify a condition or medical finding."
+        }
+        return "This description is for the \(region.name.lowercased()). It contains scan voxels assigned to that intensity range. The bands group scan voxels by intensity only. They are not anatomical tissue labels and do not identify a condition or medical finding."
+    }
+}
+
+private struct PatientFacingView: View {
+    let scan: ProcessedScan
+    let store: CaseStore
+
+    var body: some View {
+        GeometryReader { proxy in
+            if proxy.size.width >= 900 {
+                HStack(spacing: 0) {
+                    anatomy
+                        .frame(width: proxy.size.width * 0.62)
+                    narrative
+                }
+            } else {
+                VStack(spacing: 0) {
+                    anatomy
+                        .frame(height: proxy.size.height * 0.58)
+                    narrative
+                }
+            }
+        }
+        .background(Color.praesciaPaper)
+        .accessibilityIdentifier("patient-facing-view")
+    }
+
+    private var anatomy: some View {
+        AnatomyView(scan: scan, store: store, showsClinicalTools: false)
+    }
+
+    private var narrative: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                Text("WHAT THIS VIEW SHOWS")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .tracking(2)
+                    .foregroundStyle(Color.praesciaAmber)
+
+                if let region = selectedRegion {
+                    HStack(spacing: 12) {
+                        Circle()
+                            .fill(Color(red: Double(region.color.x), green: Double(region.color.y), blue: Double(region.color.z)))
+                            .frame(width: 22, height: 22)
+                        Text(region.name)
+                            .font(.system(.largeTitle, design: .serif).weight(.semibold))
+                            .foregroundStyle(Color.praesciaInk)
+                    }
+                } else {
+                    Text("Scan intensity bands")
+                        .font(.system(.largeTitle, design: .serif).weight(.semibold))
+                        .foregroundStyle(Color.praesciaInk)
+                }
+
+                Text(PatientFacingNarrative.description(for: selectedRegion))
+                    .font(.title2)
+                    .lineSpacing(6)
+                    .foregroundStyle(Color.praesciaInk)
+                    .accessibilityIdentifier("patient-facing-description")
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Research prototype", systemImage: "exclamationmark.shield")
+                        .font(.title3.weight(.semibold))
+                    Text("For education, consent conversations, and review only. Not a medical device. Not for diagnosis, treatment decisions, surgical planning, or intraoperative guidance.")
+                        .font(.title3)
+                        .lineSpacing(4)
+                        .accessibilityIdentifier("patient-facing-safety")
+                }
+                .foregroundStyle(Color.praesciaInk)
+
+                Text("Presentation only: this mode hides details and tools on screen. It does not restrict access to the scan or protect data.")
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("patient-facing-boundary")
+            }
+            .padding(.horizontal, 36)
+            .padding(.top, 88)
+            .padding(.bottom, 36)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(Color.praesciaPaper)
+    }
+
+    private var selectedRegion: Region? {
+        scan.regions.first { $0.id == store.selectedRegionID }
     }
 }
 

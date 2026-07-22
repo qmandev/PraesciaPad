@@ -66,6 +66,42 @@ struct PraesciaPadTests {
         #expect(abs(PhysicalMath.distanceMM(first, second) - sqrt(104)) < 1e-12)
     }
 
+    @Test func patientFacingNarrativeUsesComputedBandWithoutClinicalNumbers() {
+        let region = Region(
+            id: 2,
+            name: "Middle-intensity band",
+            voxelCount: 42_000,
+            volumeML: 987.6,
+            color: SIMD3(0.94, 0.55, 0.20)
+        )
+        let description = PatientFacingNarrative.description(for: region)
+
+        #expect(description == "This description is for the middle-intensity band. It contains scan voxels assigned to that intensity range. The bands group scan voxels by intensity only. They are not anatomical tissue labels and do not identify a condition or medical finding.")
+        #expect(!description.contains("42"))
+        #expect(!description.contains("987"))
+        #expect(!description.contains("mL"))
+    }
+
+    @Test func displayCoordinatesRoundTripKnownRASPointForObliqueAffine() {
+        let affine = simd_double4x4(rows: [
+            SIMD4(0, -2, 0, 10),
+            SIMD4(1, 0, 0, -4),
+            SIMD4(0, 0, 3, 7),
+            SIMD4(0, 0, 0, 1)
+        ])
+        let coordinateSpace = ScanCoordinateSpace(
+            dimensions: SIMD3(5, 7, 9),
+            affineMM: affine
+        )
+        let ras = PhysicalMath.worldPoint(voxel: SIMD3(4, 2, 7), affine: affine)
+        let display = coordinateSpace.displayPoint(rasMM: ras)
+
+        #expect(ras == SIMD3(6, 0, 28))
+        #expect(coordinateSpace.centerRASMM == SIMD3(4, -2, 19))
+        #expect(display == SIMD3(-2, 9, 2))
+        #expect(coordinateSpace.rasPoint(displayMM: display) == ras)
+    }
+
     @Test func parserReadsSFormUnitsScalingAndVoxelValues() throws {
         let affineRows: [[Float]] = [
             [0, -2, 0, 10],
@@ -194,7 +230,7 @@ struct PraesciaPadTests {
         #expect(result.labels.count == 64)
     }
 
-    @Test func meshCoordinatesPreserveRASOrientationForAsymmetricLandmarks() throws {
+    @Test func meshCoordinatesUseAnteriorRASViewForAsymmetricLandmarks() throws {
         let dimensions = SIMD3(3, 3, 3)
         let metadata = ScanMetadata(
             dimensions: dimensions,
@@ -214,10 +250,34 @@ struct PraesciaPadTests {
         let superior = try meshCentroid(result.meshes, id: 3)
 
         #expect(result.stride == 1)
-        #expect(simd_distance(right, SIMD3(1, 0, 0)) < 1e-6)
-        #expect(simd_distance(anterior, SIMD3(0, 0, -1)) < 1e-6)
+        #expect(simd_distance(right, SIMD3(-1, 0, 0)) < 1e-6)
+        #expect(simd_distance(anterior, SIMD3(0, 0, 1)) < 1e-6)
         #expect(simd_distance(superior, SIMD3(0, 1, 0)) < 1e-6)
         #expect(simd_determinant(simd_float3x3(right, anterior, superior)) > 0)
+    }
+
+    @Test func negativeDeterminantAffineKeepsTriangleNormalsFacingOutward() throws {
+        let dimensions = SIMD3(1, 1, 1)
+        let affine = simd_double4x4(diagonal: SIMD4(-2, 3, 4, 1))
+        let metadata = ScanMetadata(
+            dimensions: dimensions,
+            voxelSizeMM: SIMD3(2, 3, 4),
+            dataType: "test",
+            affineMM: affine,
+            voxelVolumeMM3: 24
+        )
+        let result = ScanPipeline.buildMeshes(labels: [1], metadata: metadata)
+        let mesh = try #require(result.meshes.first { $0.id == 1 })
+
+        for offset in stride(from: 0, to: mesh.triangleIndices.count, by: 3) {
+            let first = mesh.positionsMM[Int(mesh.triangleIndices[offset])]
+            let second = mesh.positionsMM[Int(mesh.triangleIndices[offset + 1])]
+            let third = mesh.positionsMM[Int(mesh.triangleIndices[offset + 2])]
+            let normal = simd_cross(second - first, third - first)
+            let triangleCenter = (first + second + third) / 3
+
+            #expect(simd_dot(normal, triangleCenter) > 0)
+        }
     }
 
     @Test func meshExtentsPreserveAnisotropicPhysicalProportions() throws {

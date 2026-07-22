@@ -18,7 +18,7 @@ extension CaseStore {
         selectedRegionID = scan.regions.first?.id
         visibleRegionIDs = Set(scan.regions.map(\.id))
         if mode == "measurement" {
-            measurementPointsMM = [SIMD3(0, 0, 0), SIMD3(3, 4, 0)]
+            measurementPointsRASMM = [SIMD3(0, 0, 0), SIMD3(3, 4, 0)]
         }
     }
 }
